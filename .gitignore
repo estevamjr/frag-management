@@ -1,0 +1,64 @@
+# --- Arquivo .gitignore Global ---
+# Este arquivo na raiz do projeto gerencia todos os serviços.
+
+# --- Regras Gerais e de Ambiente ---
+
+# Arquivos de ambiente - NUNCA devem ir para o Git!
+.env
+.env.*
+!.env.example
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos de IDEs (com exceções para compartilhamento de configuração)
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# --- Regras do Backend (Python/FastAPI) ---
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# Cache e arquivos compilados do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de distribuição e build
+build/
+dist/
+*.egg-info/
+
+# Relatórios de teste e cobertura
+.pytest_cache/
+htmlcov/
+.coverage
+
+# --- Regras do Frontend/Log (Node.js/NestJS) ---
+
+# Dependências
+node_modules/
+
+# Arquivos de log
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Relatórios de teste e cobertura
+coverage/
+.nyc_output
+
+# Dados de tempo de execução
+pids/
+*.pid
+*.pid.lock
