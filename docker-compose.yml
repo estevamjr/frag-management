@@ -1,0 +1,105 @@
+# (Arquivo salvo em FRAGMANAGEMENT/docker-compose.yml)
+# A linha "version" foi removida.
+
+services:
+  
+  # --- SERVIÇOS DE API ---
+
+  frag-api:
+    build:
+      context: ./backend 
+      dockerfile: Dockerfile
+    container_name: frag-api-service
+    ports:
+      - "8000:8000" 
+    volumes:
+      - ./backend:/app 
+    env_file:
+      - .env 
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db: # Espera o 'db' estar saudável
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend 
+    container_name: celery-worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_started
+      frag-api:
+        condition: service_started
+    restart: unless-stopped
+
+  log-api:
+    build:
+      context: ./log 
+      dockerfile: Dockerfile
+    container_name: log-api-service
+    ports:
+      - "3000:3000" 
+    volumes:
+      - ./log:/usr/src/app
+      - /usr/src/app/node_modules
+    env_file:
+      - .env
+    depends_on:
+      db: # Espera o 'db' estar saudável
+        condition: service_healthy
+    command: npm run start:dev
+    restart: unless-stopped
+
+  # --- SERVIÇOS DE INFRA ---
+
+  db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    env_file:
+      - .env 
+    # --- ESTA É A CORREÇÃO ---
+    # O Postgres precisa que as variáveis sejam passadas 
+    # para o 'environment' para inicializar o banco.
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" 
+    # Healthcheck que você tinha no seu .yml original
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-broker
+    ports:
+      - "6379:6379" 
+    # O Redis não precisa de env_file, ele funciona direto
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

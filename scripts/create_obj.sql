@@ -1,0 +1,20 @@
+-- CREATE OR REPLACE FUNCTION insert_matches_bulk(
+--     matches_data jsonb -- Recebe um array JSON de partidas
+-- )
+-- RETURNS VOID AS $$
+-- DECLARE
+--     match_record jsonb; -- Variável para guardar cada partida do loop
+-- BEGIN
+--     -- Faz um loop em cada objeto JSON dentro do array JSON
+--     FOR match_record IN SELECT * FROM jsonb_array_elements(matches_data)
+--     LOOP
+--         -- Insere a partida na tabela 'matches'
+--         INSERT INTO matches (match_id, start_time, end_time)
+--         VALUES (
+--             match_record->>'match_id', -- Extrai o campo 'match_id' como texto
+--             (match_record->>'start_time')::timestamptz, -- Extrai e converte para timestamp
+--             (match_record->>'end_time')::timestamptz -- Extrai e converte para timestamp
+--         );
+--     END LOOP;
+-- END;
+-- $$ LANGUAGE plpgsql;
