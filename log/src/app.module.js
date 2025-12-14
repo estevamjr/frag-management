@@ -13,7 +13,7 @@ const { Match } = require('./log/data/log.entity.js');
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DB,
       entities: [Match],
-      synchronize: true,
+      synchronize: false,
       // ssl: {
       //   rejectUnauthorized: false,
       // },

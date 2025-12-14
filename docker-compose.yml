@@ -1,23 +1,50 @@
 # (Arquivo salvo em FRAGMANAGEMENT/docker-compose.yml)
-# A linha "version" foi removida.
 
 services:
-  
+
+  # --- SERVIÇO DE ENTRADA (O "PORTEIRO") ---
+
+  api-gateway:
+    build:
+      context: ./api-gateway # <-- A pasta que o Nest criou (com hífen)
+      dockerfile: Dockerfile
+    container_name: api-gateway-service
+    ports:
+      - "8080:8080" # <-- A porta principal do projeto [cite: 91, 95]
+    volumes:
+      - ./api-gateway:/usr/src/app
+      - /usr/src/app/node_modules # Garante que o node_modules do container seja usado
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      frag-api:
+        condition: service_started
+      log-api:
+        condition: service_started
+    command: npm run start:dev # Usando o mesmo padrão do seu log-api
+    restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
+
   # --- SERVIÇOS DE API ---
 
   frag-api:
     build:
-      context: ./backend 
+      context: ./backend
       dockerfile: Dockerfile
     container_name: frag-api-service
     ports:
-      - "8000:8000" 
+      - "8000:8000"
     volumes:
-      - ./backend:/app 
+      - ./backend:/app
     env_file:
-      - .env 
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "db.rsvxcxnilkfyxuwmlxvn.supabase.co:host-gateway"  
     depends_on:
       db: # Espera o 'db' estar saudável
         condition: service_healthy
@@ -25,10 +52,12 @@ services:
         condition: service_started
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
 
   worker:
     build:
-      context: ./backend 
+      context: ./backend
     container_name: celery-worker
     command: celery -A app.tasks.celery_app worker --loglevel=info
     volumes:
@@ -43,14 +72,16 @@ services:
       frag-api:
         condition: service_started
     restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
 
   log-api:
     build:
-      context: ./log 
+      context: ./log
       dockerfile: Dockerfile
     container_name: log-api-service
     ports:
-      - "3000:3000" 
+      - "3000:3000"
     volumes:
       - ./log:/usr/src/app
       - /usr/src/app/node_modules
@@ -61,6 +92,8 @@ services:
         condition: service_healthy
     command: npm run start:dev
     restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
 
   # --- SERVIÇOS DE INFRA ---
 
@@ -68,9 +101,9 @@ services:
     image: postgres:15-alpine
     container_name: postgres-db
     env_file:
-      - .env 
+      - .env
     # --- ESTA É A CORREÇÃO ---
-    # O Postgres precisa que as variáveis sejam passadas 
+    # O Postgres precisa que as variáveis sejam passadas
     # para o 'environment' para inicializar o banco.
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -79,7 +112,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432" 
+      - "5432:5432"
     # Healthcheck que você tinha no seu .yml original
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -87,12 +120,14 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
 
   redis:
     image: redis:7-alpine
     container_name: redis-broker
     ports:
-      - "6379:6379" 
+      - "6379:6379"
     # O Redis não precisa de env_file, ele funciona direto
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -100,6 +135,14 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks: # Adicionado à rede
+      - frag-net
+
+# --- REDE E VOLUMES ---
+
+networks: # <-- Bloco de rede definido
+  frag-net:
+    driver: bridge
 
 volumes:
   postgres_data:

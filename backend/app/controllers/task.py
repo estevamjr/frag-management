@@ -1,16 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from celery.result import AsyncResult
-from ..tasks import celery_app # Importa a instância do Celery que você criou em tasks.py
+from ..tasks import (
+    celery_app,
+)  # Importa a instância do Celery que você criou em tasks.py
 from pydantic import BaseModel
 from typing import Optional, Any
 
 router = APIRouter()
+
 
 # Schema de resposta para o status da tarefa
 class TaskStatus(BaseModel):
     task_id: str
     status: str
     result: Optional[Any] = None
+
 
 @router.get("/tasks/status/{task_id}", response_model=TaskStatus)
 def get_task_status(task_id: str):
@@ -23,10 +27,10 @@ def get_task_status(task_id: str):
 
     status = task_result.state
     result = task_result.result
-    
+
     # Se a tarefa falhou, queremos retornar o erro como uma string
     if status == "FAILURE":
-        result = str(result) # Converte a exceção/erro em string
+        result = str(result)  # Converte a exceção/erro em string
         return TaskStatus(task_id=task_id, status=status, result=result)
 
     # Se a tarefa ainda não está pronta (PENDING) ou foi recebida (RECEIVED)

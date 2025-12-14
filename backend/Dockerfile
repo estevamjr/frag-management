@@ -4,12 +4,26 @@ FROM python:3.11-slim
 # Definimos o diretório de trabalho dentro do container
 WORKDIR /app
 
+# --- PASSO 1: INSTALAÇÃO DE DEPENDÊNCIAS DE SISTEMA ---
+# Este passo é crucial para compilar o psycopg2 (driver PostgreSQL)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copia o arquivo de dependências
 COPY requirements.txt .
 
+# --- PASSO 2: INSTALAÇÃO DE DEPENDÊNCIAS PYTHON ---
 # Instala as dependências do Python
 RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
 
+# --- PASSO 3: LIMPEZA (OPCIONAL, MAS RECOMENDADO) ---
+# Remove as ferramentas de compilação para reduzir o tamanho final da imagem
+RUN apt-get purge -y gcc libpq-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+    
 # Copia todo o código do backend para o container
 COPY . .
 

@@ -1,12 +1,15 @@
 # backend/app/services/match.py
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import joinedload
+
+# from sqlalchemy.orm import joinedload
 import uuid
 from typing import Optional
 
 from app.models import match as match_models
-from app.schemas import kill as kill_schemas
+
+# from app.schemas import kill as kill_schemas
+
 
 def get_kill_by_id(db: Session, kill_id: uuid.UUID):
     """
@@ -14,13 +17,19 @@ def get_kill_by_id(db: Session, kill_id: uuid.UUID):
     """
     return db.query(match_models.Kill).filter(match_models.Kill.id == kill_id).first()
 
+
 def get_kill_by_db_id(db: Session, kill_db_id: uuid.UUID):
     """
     Busca um jogador pelo seu ID primário do banco de dados (UUID).
     """
-    return db.query(match_models.Kill).filter(match_models.Kill.id == kill_db_id).first()
+    return (
+        db.query(match_models.Kill).filter(match_models.Kill.id == kill_db_id).first()
+    )
 
-def get_all_kills(db: Session, page: int, limit: int, match_id: Optional[uuid.UUID] = None):
+
+def get_all_kills(
+    db: Session, page: int, limit: int, match_id: Optional[uuid.UUID] = None
+):
     """
     Busca todos os kills com paginação, opcionalmente filtrando por partida.
     """
@@ -38,7 +47,7 @@ def get_all_kills(db: Session, page: int, limit: int, match_id: Optional[uuid.UU
     # Se não houver itens, retornamos uma estrutura vazia
     if total_items == 0:
         return {"total_items": 0, "items": []}
-    
+
     # Ordena os resultados
     query = query.order_by(match_models.Kill.weapon.desc())
 
@@ -50,6 +59,6 @@ def get_all_kills(db: Session, page: int, limit: int, match_id: Optional[uuid.UU
         offset = (page - 1) * limit
         items = query.offset(offset).limit(limit).all()
         return {"total_items": total_items, "items": items}
-    
+
     items = query.all()
     return {"total_items": total_items, "items": items}

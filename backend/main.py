@@ -22,6 +22,7 @@ app.include_router(player_controller.router, prefix="/api/v1", tags=["Player"])
 
 app.include_router(kill_controller.router, prefix="/api/v1", tags=["Kill"])
 
+
 @app.get("/")
 def read_root():
     return {"Status": "API is running"}

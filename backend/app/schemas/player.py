@@ -4,25 +4,32 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 
+
 class BonusBase(BaseModel):
     bonus_type: str
     bonus_description: Optional[str] = None
 
+
 class Bonus(BonusBase):
     id: uuid.UUID
+
     class Config:
         from_attributes = True
+
 
 class PlayerBase(BaseModel):
     player_name: str
     frags: int = 0
     deaths: int = 0
 
+
 class Player(PlayerBase):
     id: uuid.UUID
     bonuses: List[Bonus] = []
+
     class Config:
         from_attributes = True
+
 
 # --- SCHEMA PARA RESPOSTAS PAGINADAS ---
 class PaginatedPlayerResponse(BaseModel):

@@ -5,17 +5,20 @@ from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
-from sqlalchemy.sql import text
+
+# from sqlalchemy.sql import text
+
 
 class Match(Base):
     __tablename__ = "matches"
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    match_id = Column(String, unique=True, index=True, nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    match_id = Column("matchId", String, unique=True, index=True, nullable=False)
     start_time = Column(TIMESTAMP(timezone=True))
     end_time = Column(TIMESTAMP(timezone=True))
     players = relationship("Player", back_populates="match")
     kills = relationship("Kill", back_populates="match")
     bonuses = relationship("Bonus", back_populates="match")
+
 
 class Player(Base):
     __tablename__ = "players"
@@ -27,6 +30,7 @@ class Player(Base):
     match = relationship("Match", back_populates="players")
     bonuses = relationship("Bonus", back_populates="player")
 
+
 class Bonus(Base):
     __tablename__ = "bonuses"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -37,6 +41,7 @@ class Bonus(Base):
     player = relationship("Player", back_populates="bonuses")
     match = relationship("Match", back_populates="bonuses")
 
+
 class Kill(Base):
     __tablename__ = "kills"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -46,6 +51,7 @@ class Kill(Base):
     kill_time = Column(TIMESTAMP(timezone=True))
     match_id = Column(UUID(as_uuid=True), ForeignKey("matches.id"), nullable=False)
     match = relationship("Match", back_populates="kills")
+
 
 class GlobalPlayerStats(Base):
     __tablename__ = "global_player_stats"
