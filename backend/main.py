@@ -1,26 +1,27 @@
 # backend/main.py
 
 from fastapi import FastAPI
-from app.controllers import match as match_controller
+from app.controllers import match as match_controller, auth as auth_controller
 from app.core.database import engine
 from app.controllers import task as task_controller
 from app.controllers import player as player_controller
 from app.controllers import kill as kill_controller
 from app.models import match as match_models
+from app.models import user as user_model
 
-# Cria as tabelas no banco de dados (se não existirem)
 match_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Frag Management API")
 
-# Inclui as rotas do controller de partidas
 app.include_router(match_controller.router, prefix="/api/v1", tags=["Matches"])
 
-app.include_router(task_controller.router, prefix="/api/v1", tags=["Taks"])
+app.include_router(task_controller.router, prefix="/api/v1", tags=["Tasks"])
 
 app.include_router(player_controller.router, prefix="/api/v1", tags=["Player"])
 
 app.include_router(kill_controller.router, prefix="/api/v1", tags=["Kill"])
+
+app.include_router(auth_controller.router, prefix="/auth", tags=["Authentication"])
 
 
 @app.get("/")

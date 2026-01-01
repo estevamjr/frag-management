@@ -1,30 +1,30 @@
-#!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-echo "🛡️  GUARDIÃO DO CÓDIGO ATIVADO..."
+echo "🛡️  CODE GUARDIAN ACTIVATED..."
 
-# 1. Verificar Backend Python
-echo "🐍 Verificando: backend..."
+# 1. Check Python Backend
+echo "🐍 Checking: backend..."
 cd backend
 if [ -f ".venv/Scripts/black" ]; then
     ./.venv/Scripts/black --check . || exit 1
     ./.venv/Scripts/flake8 . || exit 1
 else
+    # Fallback for Linux/Mac or global python
     python -m black --check . || exit 1
     python -m flake8 . || exit 1
 fi
 cd ..
 
-# 2. Verificar Log API
-echo "📊 Verificando: log..."
+# 2. Check Log Service
+echo "📊 Checking: log-service..."
 cd log
 npm run lint || exit 1
 cd ..
 
-# 3. Verificar API Gateway
-echo "🚪 Verificando: api-gateway..."
+# 3. Check API Gateway
+echo "🚪 Checking: api-gateway..."
 cd api-gateway
 npm run lint || exit 1
 cd ..
 
-echo "✅ TUDO LIMPO! COMMIT AUTORIZADO."
+echo "✅ ALL CLEAN! COMMIT AUTHORIZED."
