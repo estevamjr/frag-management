@@ -1,20 +1,21 @@
-# backend/app/core/database.py
-
-import os
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import os
 
-# Carrega as variáveis de ambiente do arquivo .env
-load_dotenv()
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://user:password@db:5432/frag_db"
+)
 
-# Lê a URL de conexão ÚNICA do .env
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-# Verificação de segurança
-if DATABASE_URL is None:
-    raise ValueError("Erro: A variável DATABASE_URL não foi encontrada no arquivo .env")
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

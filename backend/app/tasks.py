@@ -1,58 +1,49 @@
-# backend/app/tasks.py
-
 import os
-
-# import time
-import re  # Módulo de Expressões Regulares
-
-# import uuid
-from collections import defaultdict  # Para contar frags/deaths facilmente
-from datetime import datetime  # Para conversão de timestamp
+import re
+import logging
+from collections import defaultdict
+from datetime import datetime
 from celery import Celery
 from dotenv import load_dotenv
 from app.core.database import SessionLocal
 from app.models import match as match_models
 
+# from app.models.user import User # Import se necessário
+
 load_dotenv()
+
+# Configuração de Log Profissional
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "tasks", broker=os.getenv("REDIS_URL"), backend=os.getenv("REDIS_URL")
 )
 
-# --- FUNÇÕES DE LÓGICA DE PARSING (COM TIMESTAMPS E CORREÇÃO) ---
-
 
 def split_log_into_match_chunks(log_content: str) -> list:
-    """
-    Divide o log (formato simulado ou CSGO.txt) em blocos, um por partida,
-    incluindo start_time e end_time.
-    """
-    print("--- DEBUG: split_log_into_match_chunks ---")
+    logger.info("--- START: Split Log Chunks ---")
     lines = log_content.strip().split("\n")
     matches = []
     current_match_lines = []
     current_match_id = None
-    current_start_time = None  # Armazena o datetime do início
+    current_start_time = None
     in_match = False
 
-    # Regex para capturar timestamp e ID do início
     start_pattern = re.compile(
         r"^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}) - New match (.*?) has started$"
     )
 
-    print(f"Total lines received: {len(lines)}")
-    line_counter = 0
+    logger.info(f"Total lines received: {len(lines)}")
 
     for line in lines:
-        line_counter += 1
         line = line.strip()
         if not line:
             continue
 
         start_match = start_pattern.search(line)
         if start_match:
-            print(f"!!! START MATCH FOUND on line {line_counter}: '{line}'")
-            # Salva partida anterior, se houver
+            # Lógica de fechamento da match anterior
             if in_match and current_match_lines and current_match_id:
                 last_timestamp_end = None
                 for l_end in reversed(current_match_lines):
@@ -76,14 +67,13 @@ def split_log_into_match_chunks(log_content: str) -> list:
                     }
                 )
 
-            # Inicia nova partida
             timestamp_str, current_match_id = start_match.groups()
             try:
                 current_start_time = datetime.strptime(
                     timestamp_str, "%d/%m/%Y %H:%M:%S"
                 )
             except ValueError:
-                print(f"AVISO: Formato de data inválido na linha de início: {line}")
+                logger.warning(f"Data inválida no início: {line}")
                 current_start_time = None
 
             current_match_lines = [line]
@@ -91,18 +81,9 @@ def split_log_into_match_chunks(log_content: str) -> list:
 
         elif in_match:
             current_match_lines.append(line)
-
-            # --- CORREÇÃO: Use simple string checking instead of regex format ---
-            # Monta a string exata que esperamos para o fim da partida
             expected_end_line = f"Match {current_match_id} has ended"
 
-            # Verifica se a linha ATUAL contém a string de fim
             if expected_end_line in line:
-                print(
-                    f"!!! END MATCH FOUND for {current_match_id} on line {line_counter}: '{line}'"
-                )
-
-                # Extrai o timestamp do início da linha de fim
                 end_timestamp_str_match = re.match(
                     r"^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})", line
                 )
@@ -113,30 +94,21 @@ def split_log_into_match_chunks(log_content: str) -> list:
                             end_timestamp_str_match.group(1), "%d/%m/%Y %H:%M:%S"
                         )
                     except ValueError:
-                        print(
-                            f"AVISO: Formato de data inválido na linha de fim: {line}"
-                        )
-                else:
-                    print(
-                        f"AVISO: Não foi possível extrair timestamp da linha de fim: {line}"
-                    )
-                # --- FIM DA CORREÇÃO ---
+                        logger.warning(f"Data inválida no fim: {line}")
 
                 matches.append(
                     {
                         "match_id": current_match_id,
                         "lines": current_match_lines,
                         "start_time": current_start_time,
-                        "end_time": current_end_time,  # Usa o timestamp extraído da linha de fim
+                        "end_time": current_end_time,
                     }
                 )
-                # Reseta para a próxima partida
                 in_match = False
                 current_match_lines = []
                 current_match_id = None
                 current_start_time = None
 
-    # Adiciona a última partida se o log terminar sem uma linha de fim explícita
     if in_match and current_match_lines and current_match_id:
         last_timestamp_final = None
         for l_final in reversed(current_match_lines):
@@ -151,7 +123,7 @@ def split_log_into_match_chunks(log_content: str) -> list:
                     break
                 except ValueError:
                     pass
-        print(f"!!! EOF REACHED: Adding last match {current_match_id} found.")
+        logger.info(f"EOF Alcançado. Adicionando última partida {current_match_id}.")
         matches.append(
             {
                 "match_id": current_match_id,
@@ -161,24 +133,15 @@ def split_log_into_match_chunks(log_content: str) -> list:
             }
         )
 
-    print(f"--- DEBUG: Finished splitting. Found {len(matches)} matches. ---")
-
-    if not matches:
-        print("WARNING: No matches were added to the list.")
-
+    logger.info(f"--- END: Split finished. Found {len(matches)} matches. ---")
     return matches
 
 
 def process_match_chunk(match_lines: list) -> dict:
-    """
-    Recebe as linhas de UMA partida (formato CSGO.txt) e extrai
-    jogadores (com frags/deaths) e kills (com kill_time).
-    """
     players_stats = defaultdict(lambda: {"frags": 0, "deaths": 0})
     kills_log = []
     players_discovered = set()
 
-    # Regex com captura de timestamp
     kill_pattern = re.compile(
         r"^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}) - (.*) killed (.*) using (.*)$"
     )
@@ -189,15 +152,14 @@ def process_match_chunk(match_lines: list) -> dict:
     for line in match_lines:
         kill_match = kill_pattern.search(line)
         world_kill_match = world_kill_pattern.search(line)
-
-        kill_time_obj = None  # Reseta para cada linha
+        kill_time_obj = None
 
         if kill_match:
             timestamp_str, killer_name, victim_name, weapon = kill_match.groups()
             try:
                 kill_time_obj = datetime.strptime(timestamp_str, "%d/%m/%Y %H:%M:%S")
             except ValueError:
-                print(f"AVISO: Formato de data inválido na linha de kill: {line}")
+                pass
 
             players_discovered.add(killer_name)
             players_discovered.add(victim_name)
@@ -217,7 +179,7 @@ def process_match_chunk(match_lines: list) -> dict:
             try:
                 kill_time_obj = datetime.strptime(timestamp_str, "%d/%m/%Y %H:%M:%S")
             except ValueError:
-                print(f"AVISO: Formato de data inválido na linha de world kill: {line}")
+                pass
 
             players_discovered.add(victim_name)
             players_stats[victim_name]["deaths"] += 1
@@ -241,73 +203,45 @@ def process_match_chunk(match_lines: list) -> dict:
             }
         )
 
-    if not players_final:
-        print(
-            f"WARNING: No players found for this chunk starting with: {match_lines[0] if match_lines else 'EMPTY CHUNK'}"
-        )
-        return {"players": [], "kills": []}
-
     return {"players": players_final, "kills": kills_log}
 
 
-# --- TAREFA PRINCIPAL DO CELERY ---
-
-
 @celery_app.task(name="process_match_log_file_task", bind=True)
-def process_match_log_file_task(self, file_path: str, task_id_str: str):
-    """
-    3. POST /matches/upload (Padrão Ouro)
-    Orquestra o processamento de um arquivo de log (formato CSGO.txt),
-    partida por partida, incluindo timestamps.
-    """
-    print(f"[TASK: {task_id_str}] INICIANDO: Processamento do arquivo {file_path}")
+def process_match_log_file_task(self, file_path: str, task_id_str: str, user_id: int):
+    logger.info(f"[TASK: {task_id_str}] INICIANDO: Processamento User ID {user_id}")
     db = SessionLocal()
 
     try:
-        # --- ETAPA 1: LER O ARQUIVO DE LOG ---
         with open(file_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
-        # --- ETAPA 2: DIVIDIR O LOG EM PARTIDAS ---
         match_chunks = split_log_into_match_chunks(log_content)
         total_matches = len(match_chunks)
-        print(
-            f"[TASK: {task_id_str}] Resultado do split: Encontradas {total_matches} partidas."
-        )
 
         if total_matches == 0:
-            print(
-                f"[TASK: {task_id_str}] Nenhuma partida encontrada. Encerrando processamento."
-            )
+            logger.warning(f"[TASK: {task_id_str}] Nenhuma partida encontrada.")
             return {"status": "completo", "total_processado": 0}
 
-        # --- ETAPA 3: PROCESSAR CADA PARTIDA (LOOP) ---
         for index, chunk in enumerate(match_chunks):
             match_id = chunk.get("match_id", f"unknown_match_{index}")
-            start_time = chunk.get("start_time")  # Pega o datetime do início
-            end_time = chunk.get("end_time")  # Pega o datetime do fim
-            print(
-                f"[TASK: {task_id_str}] Processando partida {index + 1}/{total_matches} (ID: {match_id})"
-            )
+            start_time = chunk.get("start_time")
+            end_time = chunk.get("end_time")
 
-            # --- ETAPA 4: PROCESSAR LINHAS DA PARTIDA ---
             try:
                 processed_data = process_match_chunk(chunk.get("lines", []))
             except ValueError as e:
-                print(
-                    f"[TASK: {task_id_str}] AVISO: Pulando partida {match_id}. Motivo: {e}"
-                )
+                logger.error(f"[TASK: {task_id_str}] Erro ao processar chunk: {e}")
                 continue
 
             if not processed_data.get("players"):
-                print(
-                    f"[TASK: {task_id_str}] AVISO: Pulando partida {match_id}. Nenhum jogador processado."
-                )
                 continue
 
-            # --- ETAPA 5: INSERÇÃO NO BANCO (Partida por Partida) ---
+            # Inserção com user_id
             new_match = match_models.Match(
-                match_id=match_id, start_time=start_time, end_time=end_time
+                match_id=match_id,
+                start_time=start_time,
+                end_time=end_time,
+                user_id=user_id,
             )
             db.add(new_match)
             db.commit()
@@ -328,23 +262,21 @@ def process_match_log_file_task(self, file_path: str, task_id_str: str):
             db.add_all(db_kills)
             db.commit()
 
-        print(f"[TASK: {task_id_str}] TERMINADO: Processamento concluído.")
-
-    except ValueError as ve:  # Pega o erro se NENHUMA partida for encontrada
-        print(f"[TASK: {task_id_str}] ERRO DE PROCESSAMENTO: {ve}")
-        db.rollback()
-        raise ve
+        logger.info(f"[TASK: {task_id_str}] CONCLUÍDO COM SUCESSO.")
 
     except Exception as e:
-        print(f"[TASK: {task_id_str}] ERRO INESPERADO: {e}")
+        logger.error(f"[TASK: {task_id_str}] ERRO FATAL: {e}")
         db.rollback()
         raise self.retry(exc=e, countdown=60)
+
     finally:
         db.close()
-        # Opcional: Excluir o arquivo temporário
-        # try:
-        #     os.remove(file_path)
-        # except OSError:
-        #     pass
+        # Limpeza do arquivo temporário (Reativada e Segura)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logger.info(f"🧹 Arquivo limpo: {file_path}")
+            except OSError as e:
+                logger.warning(f"⚠️ Falha ao deletar arquivo: {e}")
 
     return {"status": "completo", "total_processado": total_matches}

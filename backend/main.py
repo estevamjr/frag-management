@@ -7,7 +7,6 @@ from app.controllers import task as task_controller
 from app.controllers import player as player_controller
 from app.controllers import kill as kill_controller
 from app.models import match as match_models
-from app.models import user as user_model
 
 match_models.Base.metadata.create_all(bind=engine)
 
@@ -27,3 +26,14 @@ app.include_router(auth_controller.router, prefix="/auth", tags=["Authentication
 @app.get("/")
 def read_root():
     return {"Status": "API is running"}
+
+
+# Hack para listar rotas no log ao iniciar
+# @app.on_event("startup")
+# async def startup_event():
+#     print("\n" + "="*40)
+#     print("🗺️  Routers Mapping:")
+#     for route in app.routes:
+#         path = getattr(route, "path", str(route))
+#         print(f"📍 {path}")
+#     print("="*40 + "\n")

@@ -15,6 +15,7 @@ class Match(Base):
     match_id = Column("matchId", String, unique=True, index=True, nullable=False)
     start_time = Column(TIMESTAMP(timezone=True))
     end_time = Column(TIMESTAMP(timezone=True))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     players = relationship("Player", back_populates="match")
     kills = relationship("Kill", back_populates="match")
     bonuses = relationship("Bonus", back_populates="match")

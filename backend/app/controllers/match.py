@@ -1,4 +1,3 @@
-# backend/app/controllers/match.py
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy.orm import Session
@@ -6,10 +5,14 @@ import tempfile
 import os
 import shutil
 import uuid
+
 from app.schemas import match as match_schemas
 from app.services import match as match_service
 from app.core.database import SessionLocal
 from ..tasks import process_match_log_file_task
+
+from app.services.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -22,10 +25,12 @@ def get_db():
         db.close()
 
 
-# --- ENDPOINTS GET (Paginado) ---
 @router.get("/matches", response_model=match_schemas.PaginatedMatchResponse)
 def read_matches(
-    page: int = 1, limit: int = Query(20, gt=0, le=100), db: Session = Depends(get_db)
+    page: int = 1,
+    limit: int = Query(20, gt=0, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     result = match_service.get_all_matches(db, page=page, limit=limit)
     total_pages = (result["total_items"] + limit - 1) // limit if limit > 0 else 1
@@ -40,36 +45,45 @@ def read_matches(
 
 
 @router.get("/matches/{match_id}", response_model=match_schemas.Match)
-def read_match_by_match_id(match_id: str, db: Session = Depends(get_db)):
+def read_match_by_match_id(
+    match_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     db_match = match_service.get_match_by_id(db, match_id=match_id)
     if db_match is None:
         raise HTTPException(status_code=404, detail="Match not found")
     return db_match
 
 
-# --- ENDPOINT 1: POST /matches (Single) ---
 @router.post("/matches", response_model=match_schemas.Match, status_code=201)
-def create_new_match(match: match_schemas.MatchCreate, db: Session = Depends(get_db)):
+def create_new_match(
+    match: match_schemas.MatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     existing_match = match_service.get_match_by_id(db, match_id=match.match_id)
     if existing_match:
         raise HTTPException(status_code=400, detail="Match ID already registered")
-    return match_service.create_match(db=db, match=match)
+    return match_service.create_match(db=db, match=match, user_id=current_user.id)
 
 
-# --- ENDPOINT 2: POST /matches/bulk (Bulk/Batch) ---
 @router.post("/matches/bulk", response_model=List[match_schemas.Match], status_code=201)
 def create_new_matches_bulk(
-    matches: List[match_schemas.MatchCreate], db: Session = Depends(get_db)
+    matches: List[match_schemas.MatchCreate],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return match_service.create_matches_bulk(db=db, matches=matches)
+    return match_service.create_matches_bulk(
+        db=db, matches=matches, user_id=current_user.id
+    )
 
 
-# --- ENDPOINT 3: POST /matches/upload (Padrão Ouro) ---
 @router.post(
     "/matches/upload", response_model=match_schemas.MatchUploadResponse, status_code=202
 )
 def upload_match_log(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...), current_user: User = Depends(get_current_user)
 ):
     task_id = str(uuid.uuid4())
     temp_dir = tempfile.gettempdir()
@@ -81,8 +95,7 @@ def upload_match_log(
     finally:
         file.file.close()
 
-    # Envia a tarefa para o Celery (Redis)
-    process_match_log_file_task.delay(temp_file_path, task_id)
+    process_match_log_file_task.delay(temp_file_path, task_id, current_user.id)
 
     return {
         "message": "Arquivo recebido. O processamento foi iniciado em segundo plano.",
@@ -90,14 +103,13 @@ def upload_match_log(
     }
 
 
-# --- ENDPOINTS PUT E DELETE ---
 @router.put("/matches/{match_db_id}", response_model=match_schemas.Match)
 def update_existing_match(
     match_db_id: uuid.UUID,
     match_update: match_schemas.MatchUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # VERIFICAÇÃO DE SEGURANÇA: Impede a alteração do match_id
     if match_update.match_id is not None:
         raise HTTPException(
             status_code=400, detail="Updating 'match_id' is not allowed."
@@ -110,7 +122,11 @@ def update_existing_match(
 
 
 @router.delete("/matches/{match_db_id}", response_model=match_schemas.Match)
-def delete_existing_match(match_db_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_existing_match(
+    match_db_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     db_match = match_service.delete_match(db, match_db_id)
     if db_match is None:
         raise HTTPException(status_code=404, detail="Match not found")

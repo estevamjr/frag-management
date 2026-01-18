@@ -1,30 +1,53 @@
+#!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
 echo "🛡️  CODE GUARDIAN ACTIVATED..."
 
-# 1. Check Python Backend
-echo "🐍 Checking: backend..."
+# Function to check for errors and abort if necessary
+check_exit_code() {
+  if [ $? -ne 0 ]; then
+    echo "❌ ERROR: Verification failed for $1. Please fix the errors above and try again."
+    exit 1
+  fi
+}
+
+# --- 1. BACKEND (Python) ---
+echo "🐍 Checking: Backend (Black & Flake8)..."
 cd backend
-if [ -f ".venv/Scripts/black" ]; then
-    ./.venv/Scripts/black --check . || exit 1
-    ./.venv/Scripts/flake8 . || exit 1
+
+# Determine which Python executable to use (Priority: Windows Venv -> Linux/Mac Venv -> Global)
+if [ -f ".venv/Scripts/python.exe" ]; then
+    PY_EXEC=".venv/Scripts/python.exe" # Windows Venv
+elif [ -f ".venv/bin/python" ]; then
+    PY_EXEC=".venv/bin/python"         # Linux/Mac Venv
 else
-    # Fallback for Linux/Mac or global python
-    python -m black --check . || exit 1
-    python -m flake8 . || exit 1
+    PY_EXEC="python"                   # Global fallback
 fi
+
+# Run Black (Formatting) and Flake8 (Linting)
+$PY_EXEC -m black --check .
+check_exit_code "Backend Formatting (Black)"
+
+$PY_EXEC -m flake8 .
+check_exit_code "Backend Linting (Flake8)"
+
 cd ..
 
-# 2. Check Log Service
-echo "📊 Checking: log-service..."
-cd log
-npm run lint || exit 1
-cd ..
+# --- 2. LOG SERVICE (Node.js) ---
+# Only runs if the folder exists to avoid errors
+if [ -d "log" ]; then
+    echo "📊 Checking: Log Service..."
+    cd log
+    npm run lint
+    check_exit_code "Log Service"
+    cd ..
+fi
 
-# 3. Check API Gateway
-echo "🚪 Checking: api-gateway..."
+# --- 3. API GATEWAY (Node.js) ---
+echo "🚪 Checking: API Gateway..."
 cd api-gateway
-npm run lint || exit 1
+npm run lint
+check_exit_code "API Gateway"
 cd ..
 
-echo "✅ ALL CLEAN! COMMIT AUTHORIZED."
+echo "✅ ALL CLEAN! COMMIT AUTHORIZED. 🚀"

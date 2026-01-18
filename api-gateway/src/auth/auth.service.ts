@@ -3,6 +3,8 @@ import { HttpService } from '@nestjs/axios';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import { URLSearchParams } from 'url';
+
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -20,28 +22,26 @@ export class AuthService {
 
   async login(loginDto: LoginDto) {
     try {
-      // 1. The Gateway forwards the login request to the Python backend
+      const params = new URLSearchParams();
+      params.append('username', loginDto.username);
+      params.append('password', loginDto.password);
+
+      console.log(`📡 Sendind request for login to: ${this.backendUrl}/auth/token`);
+
       const { data } = await firstValueFrom(
-        this.httpService.post(`${this.backendUrl}/auth/login`, loginDto)
+        this.httpService.post(`${this.backendUrl}/auth/token`, params, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        })
       );
 
-      // 2. If Python validates, we create a JWT token here
-      const payload = { 
-        sub: data.id, 
-        username: data.username,
-        // Here we can add more user info if needed (roles, permissions, etc.)
-      };
-
-      return {
-        access_token: this.jwtService.sign(payload),
-        user: data
-      };
+      return data;
 
     } catch (error) {
-      if (error.response?.status === 401 || error.response?.status === 404) {
+      console.error('❌ Erro no login (Gateway):', error.response?.data || error.message);
+      
+      if (error.response?.status === 401 || error.response?.status === 404 || error.response?.status === 422) {
         throw new UnauthorizedException('User or password incorrect');
       }
-      console.error('Error during login:', error.message);
       throw new InternalServerErrorException('Internal server error during login');
     }
   }
@@ -55,6 +55,22 @@ export class AuthService {
     } catch (error: any) {
       throw new HttpException(
         error.response?.data || 'Error connecting to backend service',
+        error.response?.status || 500,
+      );
+    }
+  }
+
+  async getMe(token: string) {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get(`${this.backendUrl}/auth/me`, {
+          headers: { Authorization: token }, 
+        })
+      );
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        error.response?.data || 'Erro ao buscar perfil',
         error.response?.status || 500,
       );
     }
